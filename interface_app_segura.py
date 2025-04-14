@@ -36,3 +36,4 @@ st.markdown("<h2 style='text-align: center;'>Entrevista IA</h2>", unsafe_allow_h
 with st.form("login_form"):
     st.markdown("<div class='login-box'>", unsafe_allow_html=True)
     email = st.text_input("Email_
+
