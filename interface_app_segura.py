@@ -42,8 +42,10 @@ with st.form("login_form"):
     st.markdown("</div>", unsafe_allow_html=True)
 
 if login:
-    if autenticar(email, senha):
+   if st.button("LOGIN"):
+    if email == "admin@entrevista.com" and senha == "123456":
         st.success("Login realizado com sucesso!")
-        st.write("✅ Agora podemos ativar o assistente com IA aqui...")
     else:
+        st.error("Credenciais inválidas. Tente novamente.")
+
         st.error("Credenciais inválidas. Tente novamente.")
