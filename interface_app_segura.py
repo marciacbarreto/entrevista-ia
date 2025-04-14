@@ -35,5 +35,15 @@ st.markdown("<h2 style='text-align: center;'>Entrevista IA</h2>", unsafe_allow_h
 
 with st.form("login_form"):
     st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-    email = st.text_input("Email_
+    email = st.text_input("Email ID")
+    senha = st.text_input("Password", type="password")
+    lembrar = st.checkbox("Remember me")
+    login = st.form_submit_button("LOGIN")
+    st.markdown("</div>", unsafe_allow_html=True)
 
+if login:
+    if autenticar(email, senha):
+        st.success("Login realizado com sucesso!")
+        st.write("✅ Agora podemos ativar o assistente com IA aqui...")
+    else:
+        st.error("Credenciais inválidas. Tente novamente.")
