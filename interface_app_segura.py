@@ -1,70 +1,64 @@
 import streamlit as st
-import time
+import openai
+import os
 
-# --- Login com design moderno ---
+# Ocultar elementos do Streamlit (barra superior, menu, footer)
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+""", unsafe_allow_html=True)
+
+# LOGIN
 def autenticar():
-    st.set_page_config(page_title="Entrevista IA", layout="centered")
-    st.markdown(
-        """
+    st.markdown("""
         <style>
             .login-box {
-                background-color: #f9f9f9;
+                background-color: #f2f2f2;
                 padding: 30px;
                 border-radius: 15px;
-                box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
                 width: 100%;
-                max-width: 400px;
-                margin: 50px auto;
-                font-family: 'Segoe UI', sans-serif;
+                max-width: 380px;
+                margin: 0 auto;
             }
-            .login-box h2 {
-                text-align: center;
-                color: #333;
-                margin-bottom: 25px;
-            }
-            .stTextInput>div>div>input, .stTextInput>div>div>div>input {
-                border-radius: 10px;
+            .login-box input[type="text"],
+            .login-box input[type="password"] {
+                width: 100%;
                 padding: 10px;
+                margin: 10px 0;
+                border-radius: 8px;
                 border: 1px solid #ccc;
-                font-size: 14px;
             }
-            .stButton button {
+            .login-box button {
                 width: 100%;
                 padding: 10px;
                 background-color: #333;
                 color: #fff;
                 border: none;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
                 cursor: pointer;
             }
-            .stButton button:hover {
-                background-color: #444;
+            .login-box button:hover {
+                background-color: #555;
             }
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+    """, unsafe_allow_html=True)
 
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.markdown('<h2>Entrevista IA</h2>', unsafe_allow_html=True)
-
+    st.markdown('<h2 style="text-align: center;">Entrevista IA</h2>', unsafe_allow_html=True)
     email = st.text_input("Email ID")
     senha = st.text_input("Password", type="password")
     lembrar = st.checkbox("Remember me")
-
     if st.button("LOGIN"):
-        with st.spinner("Verificando credenciais..."):
-            time.sleep(2)  # Simula tempo de verificação
-
-        # Credenciais válidas
         if email == "admin@entrevista.com" and senha == "123456":
-            st.success("✅ Login realizado com sucesso!")
-            # Aqui você pode chamar uma função ou redirecionar para outro conteúdo
+            st.success("Login realizado com sucesso!")
+            st.experimental_set_query_params(pagina="upload")  # <- Troca de tela aqui
         else:
-            st.error("❌ Credenciais inválidas. Verifique seu e-mail e senha.")
-    
+            st.error("Credenciais inválidas. Tente novamente.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Executar a função de login
 autenticar()
