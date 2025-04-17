@@ -1,12 +1,20 @@
-from pathlib import Path
-
-# Conteúdo completo do código corrigido
-codigo_corrigido = """
 import streamlit as st
 
-# Função para redirecionar entre páginas (usando experimental por enquanto)
+# Ocultar elementos do Streamlit (barra superior, menu, rodapé)
+st.markdown(
+    """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Função para redirecionar de página
 def redirecionar_para(pagina):
-    st.experimental_set_query_params(pagina=pagina)
+    st.session_state["pagina"] = pagina
     st.experimental_rerun()
 
 # Página de login
@@ -23,28 +31,21 @@ def exibir_login():
         else:
             st.error("Credenciais inválidas. Tente novamente.")
 
-# Página de upload
+# Página de upload e link
 def exibir_upload():
     st.title("Página 2 - Upload e Link da Reunião")
-    arquivo = st.file_uploader("📎 Adicione seu currículo ou anexo", type=["pdf", "docx", "txt"])
-    link_reuniao = st.text_input("🔗 Adicione o link da reunião")
+    st.file_uploader("📎 Adicione seu currículo ou anexo", type=["pdf", "docx", "txt"])
+    st.text_input("🔗 Adicione o link da reunião")
+
     if st.button("Voltar ao login"):
         redirecionar_para("login")
 
-# Controlador de página
-param = st.experimental_get_query_params()
-pagina = param.get("pagina", ["login"])[0]
+# Inicializa estado da sessão
+if "pagina" not in st.session_state:
+    st.session_state["pagina"] = "login"
 
 # Roteamento
-if pagina == "login":
+if st.session_state["pagina"] == "login":
     exibir_login()
-elif pagina == "upload":
+elif st.session_state["pagina"] == "upload":
     exibir_upload()
-else:
-    exibir_login()
-"""
-
-# Salvar para download
-caminho = "/mnt/data/interface_app_segura_corrigida_final.py"
-Path(caminho).write_text(codigo_corrigido, encoding="utf-8")
-caminho
