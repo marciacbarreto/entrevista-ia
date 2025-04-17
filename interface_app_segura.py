@@ -69,3 +69,4 @@ elif pagina == "upload":
 elif pagina == "entrevista":
     exibir_entrevista()
 
+
