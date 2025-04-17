@@ -1,3 +1,2 @@
-# Atualização completa com login, upload e página 3
-
+# Atualização completa com Conecte-se, carregar e página 3
 
