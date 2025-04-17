@@ -1,61 +1,25 @@
+# Vamos gerar o arquivo atualizado com o conteúdo do código corrigido para download.
+codigo_corrigido = '''
 import streamlit as st
+import openai
 import os
 
-# Ocultar elementos do Streamlit (barra superior, menu, rodapé)
-st.markdown(
-    """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# Redirecionamento de página (compatível com Streamlit atual)
-def redirecionar_para_pagina(pagina):
-    st.switch_page(pagina)
-
-def autenticar():
-    st.markdown(
-        """
+# Ocultar barra superior do Streamlit
+def esconder_menu():
+    st.markdown("""
         <style>
-            .login-box {
-                background-color: #f2f2f2;
-                padding: 30px;
-                border-radius: 15px;
-                box-shadow: 0 0 10px rgba(0,0,0,0.1);
-                width: 100%;
-                max-width: 380px;
-                margin: 0 auto;
-            }
-            .login-box input[type="text"],
-            .login-box input[type="password"] {
-                width: 100%;
-                padding: 10px;
-                margin: 10px 0;
-                border-radius: 8px;
-                border: 1px solid #ccc;
-            }
-            .login-box button {
-                width: 100%;
-                padding: 10px;
-                background-color: #333;
-                color: #fff;
-                border: none;
-                border-radius: 8px;
-                font-weight: bold;
-                cursor: pointer;
-            }
-            .login-box button:hover {
-                background-color: #555;
-            }
+        #MainMenu, header, footer {visibility: hidden;}
         </style>
-        """,
-        unsafe_allow_html=True
-    )
+    """, unsafe_allow_html=True)
 
+# Redirecionamento entre páginas
+def redirecionar_para(pagina):
+    st.experimental_set_query_params(pagina=pagina)
+    st.experimental_rerun()
+
+# Página de login
+def exibir_login():
+    esconder_menu()
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     st.markdown('<h2 style="text-align: center;">Entrevista IA</h2>', unsafe_allow_html=True)
     email = st.text_input("Email ID")
@@ -65,22 +29,34 @@ def autenticar():
     if st.button("LOGIN"):
         if email == "admin@entrevista.com" and senha == "123456":
             st.success("Login realizado com sucesso!")
-            st.experimental_set_query_params(pagina="segunda")
-            st.experimental_rerun()
+            redirecionar_para("segunda")
         else:
             st.error("Credenciais inválidas. Tente novamente.")
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# Verificar parâmetros da URL para mudança de página
+# Página 2 - Upload e link da reunião
+def exibir_pagina2():
+    st.title("Página 2 - Upload e Link da Reunião")
+    arquivo = st.file_uploader("📎 Adicione seu currículo ou anexo", type=["pdf", "docx", "txt"])
+    link_reuniao = st.text_input("🔗 Adicione o link da reunião")
+
+    if st.button("Voltar ao login"):
+        redirecionar_para("login")
+
+# Controlador de página
 param = st.experimental_get_query_params()
-if param.get("pagina") == ["segunda"]:
-    st.title("Página 2 – Upload e Link da Reunião")
-    st.file_uploader("📎 Adicione seu currículo ou anexo", type=["pdf", "docx", "txt"])
-    st.text_input("🔗 Adicione o link da reunião")
-    st.markdown("⬅️ Voltar ao login", unsafe_allow_html=True)
-    if st.button("Voltar"):
-        st.experimental_set_query_params()
-        st.experimental_rerun()
+pagina = param.get("pagina", ["login"])[0]
+
+if pagina == "login":
+    exibir_login()
+elif pagina == "segunda":
+    exibir_pagina2()
 else:
-    autenticar()
-autenticar()
+    exibir_login()
+'''
+
+# Salvar como arquivo para a usuária baixar
+caminho = "/mnt/data/interface_app_segura_atualizado.py"
+with open(caminho, "w", encoding="utf-8") as f:
+    f.write(codigo_corrigido)
+
+caminho
