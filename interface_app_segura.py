@@ -1,70 +1,65 @@
+from pathlib import Path
+
+codigo_corrigido = '''
 import streamlit as st
 
+# Título fixo
 st.set_page_config(page_title="Entrevista IA", layout="centered")
 
-# Oculta barra superior
-st.markdown("""
-    <style>
-        #MainMenu, header, footer {visibility: hidden;}
-    </style>
-""", unsafe_allow_html=True)
-
-# Controle de página
+# Inicia a sessão
 if "etapa" not in st.session_state:
     st.session_state.etapa = "login"
-if "curriculo" not in st.session_state:
-    st.session_state.curriculo = None
-if "link" not in st.session_state:
-    st.session_state.link = ""
 
-# Página 1 - Login
+# Função da página de login
 def pagina_login():
     st.title("Entrevista IA")
-    st.write("Faça o login para continuar.")
+    st.subheader("Faça o login para continuar.")
     email = st.text_input("Email")
     senha = st.text_input("Senha", type="password")
     lembrar = st.checkbox("Lembrar-me")
+
     if st.button("LOGIN"):
         if email == "admin@entrevista.com" and senha == "123456":
             st.success("Login realizado com sucesso!")
             st.session_state.etapa = "upload"
-            st.experimental_rerun()
         else:
-            st.error("Email ou senha incorretos.")
+            st.error("Credenciais inválidas. Tente novamente.")
 
-# Página 2 - Upload + Link
+# Função da página de upload
 def pagina_upload():
-    st.title("Reunião")
+    st.title("Página 2 - Upload e Link da Reunião")
     st.markdown("Adicione seu currículo ou anexo (PDF, DOCX, TXT)")
-    arquivo = st.file_uploader("Currículo:", type=["pdf", "docx", "txt"])
-    if arquivo:
-        st.session_state.curriculo = arquivo
-    link = st.text_input("Adicione o link da reunião", value=st.session_state.link)
-    if link:
-        st.session_state.link = link
-    if st.button("Confirmar e entrar na reunião"):
-        if st.session_state.curriculo and st.session_state.link:
-            st.session_state.etapa = "simulacao"
-            st.experimental_rerun()
-        else:
-            st.warning("Por favor, adicione o currículo e o link da reunião.")
-    if st.button("Voltar para login"):
-        st.session_state.etapa = "login"
-        st.experimental_rerun()
 
-# Página 3 - Simulação da entrevista
+    arquivo = st.file_uploader("Currículo:", type=["pdf", "docx", "txt"])
+    link = st.text_input("Adicione o link da reunião:")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Confirmar e entrar na reunião"):
+            if arquivo and link:
+                st.session_state["curriculo_nome"] = arquivo.name
+                st.session_state["link_reuniao"] = link
+                st.session_state.etapa = "simulacao"
+            else:
+                st.error("Anexe o currículo e informe o link da reunião.")
+    with col2:
+        if st.button("Voltar ao login"):
+            st.session_state.etapa = "login"
+
+# Função da página de simulação
 def pagina_simulacao():
     st.title("Página 3 - Simulação de Entrevista")
-    st.markdown(f"**Currículo recebido:** {st.session_state.curriculo.name if st.session_state.curriculo else ''}")
-    st.markdown(f"**Link da reunião:** [Acessar reunião]({st.session_state.link})")
-    st.info("Aqui será a simulação da entrevista IA. Personalize com IA ou orientações.")
-    if st.button("Voltar para upload"):
-        st.session_state.etapa = "upload"
-        st.experimental_rerun()
-    if st.button("Sair"):
-        for key in st.session_state.keys():
-            del st.session_state[key]
-        st.experimental_rerun()
+    st.markdown(f"**Currículo recebido:** {st.session_state.curriculo_nome}")
+    st.markdown(f"**Link da reunião:** [Acessar reunião]({st.session_state.link_reuniao})")
+    st.info("Aqui será a simulação da entrevista IA. Personalize conforme desejar!")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Voltar ao upload"):
+            st.session_state.etapa = "upload"
+    with col2:
+        if st.button("Sair"):
+            st.session_state.etapa = "login"
 
 # Execução com base na etapa
 if st.session_state.etapa == "login":
@@ -73,3 +68,10 @@ elif st.session_state.etapa == "upload":
     pagina_upload()
 elif st.session_state.etapa == "simulacao":
     pagina_simulacao()
+'''
+
+# Salvar como arquivo pronto para colar no GitHub
+caminho = "/mnt/data/interface_app_segura.py"
+Path(caminho).write_text(codigo_corrigido, encoding="utf-8")
+
+caminho
