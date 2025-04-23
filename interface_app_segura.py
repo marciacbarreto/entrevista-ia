@@ -1,63 +1,75 @@
 import streamlit as st
 
-# Ocultar barra lateral, menu e rodapé do Streamlit
+st.set_page_config(page_title="Entrevista IA", layout="centered")
+
+# Oculta barra superior
 st.markdown("""
     <style>
         #MainMenu, header, footer {visibility: hidden;}
-        .block-container {padding-top: 3rem;}
     </style>
 """, unsafe_allow_html=True)
 
-def main():
-    # Gerenciar qual página está ativa
-    if 'page' not in st.session_state:
-        st.session_state.page = 'login'
+# Controle de página
+if "etapa" not in st.session_state:
+    st.session_state.etapa = "login"
+if "curriculo" not in st.session_state:
+    st.session_state.curriculo = None
+if "link" not in st.session_state:
+    st.session_state.link = ""
 
-    if st.session_state.page == 'login':
-        show_login()
-    elif st.session_state.page == 'upload':
-        show_upload()
-    elif st.session_state.page == 'entrevista':
-        show_entrevista()
-
-def show_login():
-    st.markdown("## Entrevista IA")
+# Página 1 - Login
+def pagina_login():
+    st.title("Entrevista IA")
+    st.write("Faça o login para continuar.")
     email = st.text_input("Email")
     senha = st.text_input("Senha", type="password")
-    if st.button("Login"):
+    lembrar = st.checkbox("Lembrar-me")
+    if st.button("LOGIN"):
         if email == "admin@entrevista.com" and senha == "123456":
-            st.session_state.page = 'upload'
+            st.success("Login realizado com sucesso!")
+            st.session_state.etapa = "upload"
             st.experimental_rerun()
         else:
-            st.error("Usuário ou senha incorretos.")
+            st.error("Email ou senha incorretos.")
 
-def show_upload():
-    st.markdown("## Página 2 - Upload e Link da Reunião")
-    arquivo = st.file_uploader("Adicione seu currículo ou anexo", type=["pdf", "docx", "txt"])
-    link = st.text_input("Adicione o link da reunião")
+# Página 2 - Upload + Link
+def pagina_upload():
+    st.title("Reunião")
+    st.markdown("Adicione seu currículo ou anexo (PDF, DOCX, TXT)")
+    arquivo = st.file_uploader("Currículo:", type=["pdf", "docx", "txt"])
+    if arquivo:
+        st.session_state.curriculo = arquivo
+    link = st.text_input("Adicione o link da reunião", value=st.session_state.link)
+    if link:
+        st.session_state.link = link
     if st.button("Confirmar e entrar na reunião"):
-        if arquivo is not None and link.strip() != "":
-            st.session_state.curriculo = arquivo.name
-            st.session_state.link_reuniao = link
-            st.session_state.page = 'entrevista'
+        if st.session_state.curriculo and st.session_state.link:
+            st.session_state.etapa = "simulacao"
             st.experimental_rerun()
         else:
-            st.warning("Adicione o currículo e o link da reunião.")
-    if st.button("Voltar ao login"):
-        st.session_state.page = 'login'
+            st.warning("Por favor, adicione o currículo e o link da reunião.")
+    if st.button("Voltar para login"):
+        st.session_state.etapa = "login"
         st.experimental_rerun()
 
-def show_entrevista():
-    st.markdown("## Página 3 - Simulação de Entrevista")
-    st.write(f"**Currículo recebido:** {st.session_state.get('curriculo','')}")
-    st.write(f"**Link da reunião:** {st.session_state.get('link_reuniao','')}")
-    st.info("Aqui será a simulação da entrevista IA. (Personalize conforme desejar!)")
-    if st.button("Voltar ao upload"):
-        st.session_state.page = 'upload'
+# Página 3 - Simulação da entrevista
+def pagina_simulacao():
+    st.title("Página 3 - Simulação de Entrevista")
+    st.markdown(f"**Currículo recebido:** {st.session_state.curriculo.name if st.session_state.curriculo else ''}")
+    st.markdown(f"**Link da reunião:** [Acessar reunião]({st.session_state.link})")
+    st.info("Aqui será a simulação da entrevista IA. Personalize com IA ou orientações.")
+    if st.button("Voltar para upload"):
+        st.session_state.etapa = "upload"
         st.experimental_rerun()
     if st.button("Sair"):
-        st.session_state.page = 'login'
+        for key in st.session_state.keys():
+            del st.session_state[key]
         st.experimental_rerun()
 
-if __name__ == "__main__":
-    main()
+# Execução com base na etapa
+if st.session_state.etapa == "login":
+    pagina_login()
+elif st.session_state.etapa == "upload":
+    pagina_upload()
+elif st.session_state.etapa == "simulacao":
+    pagina_simulacao()
