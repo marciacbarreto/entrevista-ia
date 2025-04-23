@@ -1,64 +1,70 @@
-from pathlib import Path
 import streamlit as st
+from pathlib import Path
 
-# Ocultar barra superior
+# Ocultar barra superior e rodapé do Streamlit
 st.markdown("""
     <style>
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
-# Redirecionamento de página
+# Função para navegação entre páginas
 def redirecionar_para(pagina):
     st.experimental_set_query_params(pagina=pagina)
     st.experimental_rerun()
 
 # Página 1 - Login
 def exibir_login():
-    st.title("🔒 Entrevista IA")
-    email = st.text_input("Email")
-    senha = st.text_input("Senha", type="password")
+    st.markdown('<div style="display:flex; flex-direction:column; align-items:center;">', unsafe_allow_html=True)
+    st.markdown("<h2>Entrevista IA</h2>", unsafe_allow_html=True)
+    email = st.text_input("Email ID")
+    senha = st.text_input("Password", type="password")
     lembrar = st.checkbox("Remember me")
-
     if st.button("LOGIN"):
         if email == "admin@entrevista.com" and senha == "123456":
             st.success("Login realizado com sucesso!")
             redirecionar_para("upload")
         else:
             st.error("Credenciais inválidas. Tente novamente.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Página 2 - Upload e link
+# Página 2 - Upload do currículo e link da reunião
 def exibir_upload():
-    st.title("📄 Página 2 - Upload e Link da Reunião")
-    st.write("📎 Adicione seu currículo ou anexo")
-    uploaded_file = st.file_uploader("Arraste ou selecione o arquivo", type=["pdf", "docx", "txt"])
+    st.markdown("<h2>Página 2 - Upload e Link da Reunião</h2>", unsafe_allow_html=True)
+    st.markdown("📎 Adicione seu currículo ou anexo")
+    arquivo = st.file_uploader("Drag and drop file here", type=["pdf", "docx", "txt"])
+    if arquivo is not None:
+        st.success(f"Arquivo {arquivo.name} carregado com sucesso!")
+
+    st.markdown("🔗 Adicione o link da reunião")
+    link_reuniao = st.text_input("Cole o link da reunião aqui")
     
-    if uploaded_file:
-        st.session_state["curriculo"] = uploaded_file.name
-
-    link = st.text_input("🔗 Adicione o link da reunião")
-    if link:
-        st.session_state["link"] = link
-
     if st.button("Confirmar e entrar na reunião"):
-        if "curriculo" in st.session_state and "link" in st.session_state:
+        if arquivo and link_reuniao:
+            st.session_state["curriculo"] = arquivo.name
+            st.session_state["link"] = link_reuniao
             redirecionar_para("entrevista")
         else:
-            st.warning("Por favor, envie o currículo e o link da reunião.")
-
+            st.warning("Por favor, faça upload do currículo e adicione o link da reunião.")
     if st.button("Voltar ao login"):
         redirecionar_para("login")
 
-# Página 3 - Simulação de entrevista
+# Página 3 - Simulação da entrevista
 def exibir_entrevista():
-    st.title("🧠 Simulação da Entrevista")
-    st.write("**Currículo recebido:**", st.session_state.get("curriculo", "Não enviado"))
-    st.write("**Link da reunião:**", st.session_state.get("link", "Não informado"))
-    st.markdown("A entrevista será iniciada agora. Mantenha a postura e boa sorte!")
+    st.markdown("<h2>Simulação de Entrevista</h2>", unsafe_allow_html=True)
+    st.write("Currículo recebido:", st.session_state.get("curriculo", "(não informado)"))
+    st.write("Link da reunião:", st.session_state.get("link", "(não informado)"))
+    st.markdown("""
+    <b>A entrevista será iniciada agora.</b>  
+    Mantenha a postura e boa sorte!  
+    (Aqui você pode colocar uma simulação ou instruções interativas)
+    """, unsafe_allow_html=True)
+    if st.button("Finalizar"):
+        redirecionar_para("login")
 
-# Gerenciar as páginas
+# Controlador de páginas
 param = st.experimental_get_query_params()
 pagina = param.get("pagina", ["login"])[0]
 
@@ -68,5 +74,3 @@ elif pagina == "upload":
     exibir_upload()
 elif pagina == "entrevista":
     exibir_entrevista()
-
-
