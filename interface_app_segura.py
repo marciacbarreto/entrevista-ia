@@ -1,6 +1,6 @@
 import streamlit as st
 
-# Ocultar barra superior do Streamlit
+# Ocultar barra superior do Streamlit (ícones Share, GitHub, etc)
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -9,9 +9,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Função para redirecionamento de página (3 páginas)
-def trocar_pagina(pagina):
-    st.session_state["pagina"] = pagina
+# Navegação entre páginas usando session_state
+if "pagina" not in st.session_state:
+    st.session_state["pagina"] = "login"
 
 def exibir_login():
     st.markdown('<h2 style="text-align:center;">Entrevista IA</h2>', unsafe_allow_html=True)
@@ -56,15 +56,10 @@ def exibir_entrevista():
         st.session_state["pagina"] = "login"
         st.experimental_rerun()
 
-# Definir a página inicial
-if "pagina" not in st.session_state:
-    st.session_state["pagina"] = "login"
-
-# Roteamento entre páginas
+# Roteamento das páginas
 if st.session_state["pagina"] == "login":
     exibir_login()
 elif st.session_state["pagina"] == "upload":
     exibir_upload()
 elif st.session_state["pagina"] == "entrevista":
     exibir_entrevista()
-
