@@ -1,57 +1,72 @@
 import streamlit as st
 
-# Função para trocar de página usando session_state
-def trocar_pagina(pagina):
-    st.session_state["página"] = pagina
-
-# Página 1: Login
-def exibir_login():
-    st.markdown("<h2 style='text-align:center;'>Entrevista IA</h2>", unsafe_allow_html=True)
-    email = st.text_input("ID de e-mail")
-    senha = st.text_input("Senha", type="password")
-    lembrar = st.checkbox("Lembre de mim")
-    if st.button("CONECTE-SE"):
+# ----- Funções das páginas -----
+def pagina_login():
+    st.title("Entrevista IA")
+    email = st.text_input("Email", key="login_email")
+    senha = st.text_input("Senha", type="password", key="login_senha")
+    if st.button("LOGIN"):
         if email == "admin@entrevista.com" and senha == "123456":
-            st.success("Login realizado com sucesso!")
-            trocar_pagina("carregar")
+            st.session_state["logado"] = True
+            st.session_state["pagina"] = "upload"
         else:
-            st.error("Credenciais inválidas. Tente novamente.")
+            st.error("Login ou senha incorretos.")
 
-# Página 2: Upload e Link da Reunião
-def exibir_upload():
+def pagina_upload():
     st.title("Página 2 - Upload e Link da Reunião")
     arquivo = st.file_uploader("Adicione seu currículo ou anexo", type=["pdf", "docx", "txt"])
-    link_reuniao = st.text_input("Adicione o link da reunião")
-    if st.button("Confirmar e entrar na reunião"):
-        if arquivo is not None and link_reuniao:
-            st.session_state["curriculo_nome"] = arquivo.name
-            st.session_state["link_reuniao"] = link_reuniao
-            trocar_pagina("entrevista")
-        else:
-            st.warning("Adicione o currículo e o link da reunião antes de avançar.")
-    if st.button("Voltar ao login"):
-        trocar_pagina("Conecte-se")
+    link = st.text_input("Adicione o link da reunião")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if st.button("Confirmar e entrar na reunião"):
+            if arquivo and link:
+                st.session_state["arquivo"] = arquivo.name
+                st.session_state["link"] = link
+                st.session_state["pagina"] = "entrevista"
+            else:
+                st.warning("Adicione o currículo e o link da reunião!")
+    with col2:
+        st.button("Voltar ao login", on_click=lambda: mudar_pagina("login"))
 
-# Página 3: Simulação de Entrevista
-def exibir_entrevista():
+def pagina_entrevista():
     st.title("Página 3 - Simulação de Entrevista")
-    nome_curriculo = st.session_state.get("curriculo_nome", "Nenhum arquivo enviado")
-    link_reuniao = st.session_state.get("link_reuniao", "Não informado")
-    st.write(f"**Currículo recebido:** {nome_curriculo}")
-    st.write(f"**Link da reunião:** {link_reuniao}")
+    st.write(f"**Currículo recebido:** {st.session_state.get('arquivo', '')}")
+    st.write(f"**Link da reunião:** {st.session_state.get('link', '')}")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image("https://via.placeholder.com/180x220.png?text=Eu+na+reuni%C3%A3o", caption="Eu na reunião")
+    with col2:
+        st.image("https://via.placeholder.com/180x220.png?text=Recrutador", caption="Recrutador")
+    st.markdown("### Perguntas e resposta aqui")
     st.info("Aqui será a simulação da entrevista IA. (Personalize conforme desejar!)")
-    if st.button("Voltar ao upload"):
-        trocar_pagina("carregar")
-    if st.button("Sair"):
-        trocar_pagina("Conecte-se")
+    st.button("Sair", on_click=lambda: mudar_pagina("login"))
 
-# --- Roteamento das páginas ---
-if "página" not in st.session_state:
-    st.session_state["página"] = "Conecte-se"
+# ----- Fluxo de páginas -----
+def mudar_pagina(destino):
+    st.session_state["pagina"] = destino
+    if destino == "login":
+        st.session_state["logado"] = False
 
-if st.session_state["página"] == "Conecte-se":
-    exibir_login()
-elif st.session_state["página"] == "carregar":
-    exibir_upload()
-elif st.session_state["página"] == "entrevista":
-    exibir_entrevista()
+if "pagina" not in st.session_state:
+    st.session_state["pagina"] = "login"
+if "logado" not in st.session_state:
+    st.session_state["logado"] = False
+
+st.set_page_config(page_title="Entrevista IA", layout="wide")
+
+# ----- Remove barra, rodapé e menu do Streamlit -----
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# ----- Renderização das páginas -----
+if st.session_state["pagina"] == "login":
+    pagina_login()
+elif st.session_state["pagina"] == "upload":
+    pagina_upload()
+elif st.session_state["pagina"] == "entrevista":
+    pagina_entrevista()
