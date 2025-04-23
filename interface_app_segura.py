@@ -1,19 +1,19 @@
 import streamlit as st
 
-# Funções para navegação de páginas
+# Função para trocar de página usando session_state
 def trocar_pagina(pagina):
-    st.session_state["pagina"] = pagina
+    st.session_state["página"] = pagina
 
 # Página 1: Login
 def exibir_login():
-    st.title("Entrevista IA")
-    email = st.text_input("Email ID")
-    senha = st.text_input("Password", type="password")
-    lembrar = st.checkbox("Remember me")
-    if st.button("LOGIN"):
+    st.markdown("<h2 style='text-align:center;'>Entrevista IA</h2>", unsafe_allow_html=True)
+    email = st.text_input("ID de e-mail")
+    senha = st.text_input("Senha", type="password")
+    lembrar = st.checkbox("Lembre de mim")
+    if st.button("CONECTE-SE"):
         if email == "admin@entrevista.com" and senha == "123456":
             st.success("Login realizado com sucesso!")
-            trocar_pagina("upload")
+            trocar_pagina("carregar")
         else:
             st.error("Credenciais inválidas. Tente novamente.")
 
@@ -30,7 +30,7 @@ def exibir_upload():
         else:
             st.warning("Adicione o currículo e o link da reunião antes de avançar.")
     if st.button("Voltar ao login"):
-        trocar_pagina("login")
+        trocar_pagina("Conecte-se")
 
 # Página 3: Simulação de Entrevista
 def exibir_entrevista():
@@ -41,17 +41,17 @@ def exibir_entrevista():
     st.write(f"**Link da reunião:** {link_reuniao}")
     st.info("Aqui será a simulação da entrevista IA. (Personalize conforme desejar!)")
     if st.button("Voltar ao upload"):
-        trocar_pagina("upload")
+        trocar_pagina("carregar")
     if st.button("Sair"):
-        trocar_pagina("login")
+        trocar_pagina("Conecte-se")
 
-# Roteamento das páginas
-if "pagina" not in st.session_state:
-    st.session_state["pagina"] = "login"
+# --- Roteamento das páginas ---
+if "página" not in st.session_state:
+    st.session_state["página"] = "Conecte-se"
 
-if st.session_state["pagina"] == "login":
+if st.session_state["página"] == "Conecte-se":
     exibir_login()
-elif st.session_state["pagina"] == "upload":
+elif st.session_state["página"] == "carregar":
     exibir_upload()
-elif st.session_state["pagina"] == "entrevista":
+elif st.session_state["página"] == "entrevista":
     exibir_entrevista()
