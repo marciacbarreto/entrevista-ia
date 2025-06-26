@@ -1,14 +1,13 @@
 import streamlit as st
-from io import StringIO
 
-# Layout fixo e sidebar oculta
+# Configura layout fixo e oculta sidebar
 st.set_page_config(page_title="Entrevista IA", layout="centered", initial_sidebar_state="collapsed")
 
-# Inicia etapa de navegação
+# Inicia o fluxo
 if "etapa" not in st.session_state:
     st.session_state.etapa = "login"
 
-# --- Página 1: Login ---
+# Página 1: Login
 def pagina_login():
     st.markdown("<h1 style='text-align: center;'>Entrevista IA</h1>", unsafe_allow_html=True)
     st.markdown("<h4 style='text-align: center;'>Faça o login para continuar.</h4>", unsafe_allow_html=True)
@@ -21,23 +20,23 @@ def pagina_login():
         else:
             st.error("Credenciais inválidas. Tente novamente.")
 
-# --- Página 2: Upload do currículo e link ---
+# Página 2: Upload e Link
 def pagina_upload():
     st.markdown("<h2>Página 2 - Upload e Link da Reunião</h2>", unsafe_allow_html=True)
     st.markdown("Adicione seu currículo ou anexo (PDF, DOCX, TXT)")
-    uploaded_file = st.file_uploader("Currículo", type=["pdf", "docx", "txt"])
-    link = st.text_input("Adicione o link da reunião:")
+    arquivo = st.file_uploader("Currículo", type=["pdf", "docx", "txt"])
+    link = st.text_input("Link da reunião:")
     if st.button("Confirmar e entrar na reunião"):
-        if uploaded_file and link:
-            st.session_state.curriculo = uploaded_file.name
+        if arquivo and link:
+            st.session_state.curriculo = arquivo.name
             st.session_state.link = link
             st.session_state.etapa = "simulacao"
         else:
-            st.warning("Envie o currículo e o link da reunião.")
+            st.warning("Envie o currículo e o link.")
     if st.button("Voltar ao login"):
         st.session_state.etapa = "login"
 
-# --- Página 3: Simulação ---
+# Página 3: Simulação
 def pagina_simulacao():
     st.markdown("<h2>Página 3 - Simulação de Entrevista</h2>", unsafe_allow_html=True)
     st.write("Currículo recebido:", st.session_state.curriculo)
@@ -48,7 +47,7 @@ def pagina_simulacao():
     if st.button("Sair"):
         st.session_state.etapa = "login"
 
-# --- Renderização dinâmica ---
+# Executa a página conforme o estágio
 if st.session_state.etapa == "login":
     pagina_login()
 elif st.session_state.etapa == "upload":
