@@ -1,72 +1,54 @@
 import streamlit as st
+from io import StringIO
 
-# Configura o layout fixo da página
-st.set_page_config(page_title="Entrevista IA", layout="centered")
+# Layout fixo e sidebar oculta
+st.set_page_config(page_title="Entrevista IA", layout="centered", initial_sidebar_state="collapsed")
 
-# Inicializa a etapa da navegação
+# Inicia etapa de navegação
 if "etapa" not in st.session_state:
     st.session_state.etapa = "login"
 
-
+# --- Página 1: Login ---
 def pagina_login():
-    """Tela inicial de login."""
-    st.title("Entrevista IA")
-    st.subheader("Faça o login para continuar.")
+    st.markdown("<h1 style='text-align: center;'>Entrevista IA</h1>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center;'>Faça o login para continuar.</h4>", unsafe_allow_html=True)
     email = st.text_input("Email")
     senha = st.text_input("Senha", type="password")
-    st.checkbox("Lembrar-me")
-
+    lembrar = st.checkbox("Lembrar-me")
     if st.button("LOGIN"):
         if email == "admin@entrevista.com" and senha == "123456":
-            st.success("Login realizado com sucesso!")
             st.session_state.etapa = "upload"
         else:
             st.error("Credenciais inválidas. Tente novamente.")
 
-
+# --- Página 2: Upload do currículo e link ---
 def pagina_upload():
-    """Tela de envio do currículo e link da reunião."""
-    st.title("Página 2 - Upload e Link da Reunião")
+    st.markdown("<h2>Página 2 - Upload e Link da Reunião</h2>", unsafe_allow_html=True)
     st.markdown("Adicione seu currículo ou anexo (PDF, DOCX, TXT)")
-
-    arquivo = st.file_uploader("Currículo:", type=["pdf", "docx", "txt"])
+    uploaded_file = st.file_uploader("Currículo", type=["pdf", "docx", "txt"])
     link = st.text_input("Adicione o link da reunião:")
+    if st.button("Confirmar e entrar na reunião"):
+        if uploaded_file and link:
+            st.session_state.curriculo = uploaded_file.name
+            st.session_state.link = link
+            st.session_state.etapa = "simulacao"
+        else:
+            st.warning("Envie o currículo e o link da reunião.")
+    if st.button("Voltar ao login"):
+        st.session_state.etapa = "login"
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Confirmar e entrar na reunião"):
-            if arquivo and link:
-                st.session_state["curriculo_nome"] = arquivo.name
-                st.session_state["link_reuniao"] = link
-                st.session_state.etapa = "simulacao"
-            else:
-                st.error("Anexe o currículo e informe o link da reunião.")
-    with col2:
-        if st.button("Voltar ao login"):
-            st.session_state.etapa = "login"
-
-
+# --- Página 3: Simulação ---
 def pagina_simulacao():
-    """Página de simulação da entrevista."""
-    st.title("Página 3 - Simulação de Entrevista")
+    st.markdown("<h2>Página 3 - Simulação de Entrevista</h2>", unsafe_allow_html=True)
+    st.write("Currículo recebido:", st.session_state.curriculo)
+    st.write("Link da reunião:", f"[Acessar reunião]({st.session_state.link})")
+    st.success("Aqui será a simulação da entrevista IA. Personalize conforme desejar!")
+    if st.button("Voltar ao upload"):
+        st.session_state.etapa = "upload"
+    if st.button("Sair"):
+        st.session_state.etapa = "login"
 
-    curriculo = st.session_state.get("curriculo_nome", "Não informado")
-    link = st.session_state.get("link_reuniao", "#")
-
-    st.markdown(f"**Currículo recebido:** {curriculo}")
-    st.markdown(f"**Link da reunião:** [Acessar reunião]({link})")
-    st.info("Aqui será a simulação da entrevista IA. Personalize conforme desejar!")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Voltar ao upload"):
-            st.session_state.etapa = "upload"
-    with col2:
-        if st.button("Sair"):
-            st.session_state.etapa = "login"
-
-
-# Execução com base na etapa atual
+# --- Renderização dinâmica ---
 if st.session_state.etapa == "login":
     pagina_login()
 elif st.session_state.etapa == "upload":
