@@ -1,3 +1,7 @@
+from pathlib import Path
+
+# Código corrigido com prompt ajustado (sem quebra de f-string)
+codigo_corrigido_final = '''
 import streamlit as st
 import openai
 import os
@@ -65,13 +69,13 @@ elif st.session_state.pagina == "entrevista":
         st.success(f"Pergunta captada: {pergunta}")
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
-        prompt = f"Você está participando de uma entrevista de emprego. Use o currículo abaixo como base para responder à pergunta do recrutador.
+        prompt = f"""Você está participando de uma entrevista de emprego. Use o currículo abaixo como base para responder à pergunta do recrutador.
 
 Currículo:
 {st.session_state.curriculo_texto}
 
 Pergunta:
-{pergunta}"
+{pergunta}"""
 
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -91,3 +95,10 @@ Pergunta:
         st.error(f"Erro na API de reconhecimento de voz: {e}")
     except Exception as e:
         st.error(f"Ocorreu um erro ao gerar a resposta: {e}")
+'''
+
+# Salvar o arquivo corrigido
+arquivo_corrigido = Path("/mnt/data/interface_app_segura.py")
+arquivo_corrigido.write_text(codigo_corrigido_final)
+
+arquivo_corrigido.name
