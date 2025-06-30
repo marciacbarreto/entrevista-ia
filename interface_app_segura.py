@@ -1,119 +1,88 @@
-# Gerar a versão FINAL com escuta automática da pergunta via microfone e resposta silenciosa da IA
+from pathlib import Path
 
-codigo_voz = '''
+# Código final completo com todas as correções solicitadas, incluindo:
+# - Login no início
+# - Uso do currículo como base, mas não como limitação
+# - Prompt ajustado para respeitar a pergunta do recrutador
+codigo_final_completo = '''
 import streamlit as st
-import os
 import openai
+import os
+import json
 import base64
 import tempfile
 import speech_recognition as sr
 from PyPDF2 import PdfReader
 
-# Configuração visual
+# CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Entrevista IA", layout="centered")
-st.markdown(
-    """
-    <style>
-        #MainMenu, footer, header {visibility: hidden;}
-        .block-container {padding-top: 2rem;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
-# Controle de etapas
-if "etapa" not in st.session_state:
-    st.session_state.etapa = "login"
+# LOGIN - BLOQUEIA O APP ATÉ O USUÁRIO AUTORIZADO ENTRAR
+emails_autorizados = ["marciacbarreto@gmail.com"]
+senha_correta = "123456"
 
-# Extrair texto do currículo
-def extrair_texto_curriculo(uploaded_file):
-    if uploaded_file.type == "application/pdf":
-        reader = PdfReader(uploaded_file)
-        texto = ""
-        for page in reader.pages:
-            texto += page.extract_text()
-        return texto
+st.title("🔒 Login de Acesso")
+email = st.text_input("Email")
+senha = st.text_input("Senha", type="password")
+
+if email not in emails_autorizados or senha != senha_correta:
+    st.warning("Informe seu e-mail e senha corretos para acessar.")
+    st.stop()
+
+# CONTEÚDO PRINCIPAL DO APP
+st.title("Entrevista IA")
+st.write("Faça sua pergunta abaixo ou use o microfone (em breve!)")
+
+# CHAVE DA API
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# UPLOAD DE CURRÍCULO
+st.subheader("Upload do currículo (PDF, DOCX, etc.)")
+uploaded_file = st.file_uploader("Escolha o arquivo do currículo", type=["pdf", "docx", "txt"])
+
+dados_curriculo = ""
+if uploaded_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        tmp_path = tmp_file.name
+    if uploaded_file.name.endswith(".pdf"):
+        reader = PdfReader(tmp_path)
+        dados_curriculo = " ".join([page.extract_text() or "" for page in reader.pages])
+    elif uploaded_file.name.endswith(".txt") or uploaded_file.name.endswith(".docx"):
+        with open(tmp_path, "r", encoding="utf-8") as f:
+            dados_curriculo = f.read()
+    st.success("Currículo carregado com sucesso!")
+
+# CAMPO PARA LINK DA REUNIÃO
+st.subheader("Link da reunião")
+link_reuniao = st.text_input("Cole aqui o link da reunião")
+
+# CAMPO PARA PERGUNTA DO RECRUTADOR
+st.subheader("Pergunta do recrutador")
+pergunta = st.text_input("Digite ou fale sua pergunta")
+
+# BOTÃO PARA GERAR RESPOSTA
+if st.button("Responder"):
+    if not dados_curriculo:
+        st.error("Por favor, envie um currículo primeiro.")
+    elif not pergunta:
+        st.error("Digite ou fale a pergunta primeiro.")
     else:
-        return uploaded_file.read().decode("utf-8", errors="ignore")
-
-# Escutar pergunta via microfone
-def escutar_pergunta():
-    reconhecedor = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("Escutando... Faça a pergunta agora.")
-        audio = reconhecedor.listen(source)
-    try:
-        texto = reconhecedor.recognize_google(audio, language="pt-BR")
-        return texto
-    except sr.UnknownValueError:
-        st.warning("Não entendi a pergunta. Tente novamente.")
-        return ""
-    except sr.RequestError:
-        st.error("Erro ao acessar o serviço de voz.")
-        return ""
-
-# Responder com base no currículo
-def responder_pergunta(pergunta, texto_curriculo):
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    prompt = f"Você é um candidato em uma entrevista. Com base neste currículo:\\n\\n{texto_curriculo}\\n\\nPergunta do recrutador: {pergunta}\\n\\nResponda como se fosse o candidato:"
-    resposta = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "Você está simulando uma entrevista profissional."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return resposta.choices[0].message.content.strip()
-
-# Página 1: Login
-def pagina_login():
-    st.title("Entrevista IA")
-    st.subheader("Acesse com seu login")
-    email = st.text_input("Email")
-    senha = st.text_input("Senha", type="password")
-    if st.button("LOGIN"):
-        if email == "admin@entrevista.com" and senha == "123456":
-            st.session_state.etapa = "upload"
-        else:
-            st.error("Email ou senha incorretos.")
-
-# Página 2: Upload
-def pagina_upload():
-    st.title("Envie seu currículo e link da reunião")
-    curriculo = st.file_uploader("Currículo (PDF, DOCX ou TXT)", type=["pdf", "docx", "txt"])
-    link = st.text_input("Link da reunião (Zoom, Meet, etc)")
-    if st.button("Confirmar e continuar"):
-        if curriculo and link:
-            texto = extrair_texto_curriculo(curriculo)
-            st.session_state.curriculo_texto = texto
-            st.session_state.reuniao_link = link
-            st.session_state.etapa = "entrevista"
-        else:
-            st.warning("Envie o currículo e o link da reunião.")
-
-# Página 3: Simulação com escuta de voz
-def pagina_entrevista():
-    st.title("Simulação da Entrevista IA")
-    st.markdown("Clique abaixo, fale a pergunta do recrutador e receba a resposta automaticamente.")
-    if st.button("🎙️ Ouvir pergunta"):
-        pergunta = escutar_pergunta()
-        if pergunta:
-            st.success(f"Pergunta transcrita: {pergunta}")
-            resposta = responder_pergunta(pergunta, st.session_state.curriculo_texto)
-            st.markdown("### Resposta sugerida pela IA:")
-            st.success(resposta)
-
-# Controle de páginas
-if st.session_state.etapa == "login":
-    pagina_login()
-elif st.session_state.etapa == "upload":
-    pagina_upload()
-elif st.session_state.etapa == "entrevista":
-    pagina_entrevista()
+        prompt = f"Você é um candidato em uma entrevista de emprego. Use o currículo abaixo como base, mas responda à pergunta do recrutador de forma completa, mesmo que precise ir além do currículo.\n\nCurrículo:\n{dados_curriculo}\n\nPergunta do recrutador:\n{pergunta}"
+        resposta = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Você está participando de uma entrevista de emprego. Responda com confiança e objetividade."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        resposta_texto = resposta['choices'][0]['message']['content']
+        st.success("Resposta sugerida:")
+        st.write(resposta_texto)
 '''
 
-from pathlib import Path
+# Salvar o código em arquivo
+arquivo_final = Path("/mnt/data/interface_app_segura.py")
+arquivo_final.write_text(codigo_final_completo)
 
-caminho_final_voz = Path("/mnt/data/interface_app_segura.py")
-caminho_final_voz.write_text(codigo_voz, encoding="utf-8")
-caminho_final_voz
+arquivo_final.name
