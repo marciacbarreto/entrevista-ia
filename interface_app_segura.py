@@ -1,4 +1,3 @@
-
 import streamlit as st
 import openai
 import os
@@ -6,10 +5,9 @@ import tempfile
 import speech_recognition as sr
 from PyPDF2 import PdfReader
 
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO
 st.set_page_config(page_title="Entrevista IA", layout="centered", initial_sidebar_state="collapsed")
 
-# GERENCIAMENTO DE PÁGINAS (Telas)
 if "pagina" not in st.session_state:
     st.session_state.pagina = "login"
 
@@ -26,7 +24,7 @@ if st.session_state.pagina == "login":
         else:
             st.error("E-mail ou senha inválidos.")
 
-# TELA 2 – UPLOAD DO CURRÍCULO + LINK DA REUNIÃO
+# TELA 2 – UPLOAD
 elif st.session_state.pagina == "upload":
     st.title("Entrevista IA – Currículo e Link")
     uploaded_file = st.file_uploader("📎 Envie seu currículo (PDF)", type=["pdf"])
@@ -51,7 +49,7 @@ elif st.session_state.pagina == "upload":
     else:
         st.info("Envie o currículo e cole o link para continuar.")
 
-# TELA 3 – SIMULAÇÃO DE ENTREVISTA POR VOZ
+# TELA 3 – ENTREVISTA (voz → resposta)
 elif st.session_state.pagina == "entrevista":
     st.title("🎤 Entrevista IA (Simulação ao vivo)")
     st.info("Aguardando pergunta do recrutador... (microfone ativo)")
@@ -65,29 +63,13 @@ elif st.session_state.pagina == "entrevista":
         st.success(f"Pergunta captada: {pergunta}")
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
-
-        prompt = f"""Você está participando de uma entrevista de emprego.
-
-Seu objetivo é responder à pergunta feita pelo recrutador usando como referência o conteúdo do currículo abaixo. Mantenha um tom profissional, confiante, objetivo e claro. Evite respostas vagas ou genéricas. Personalize a resposta com base nas experiências, habilidades e qualificações descritas no currículo.
+        prompt = f"""Você está participando de uma entrevista de emprego. Use o currículo abaixo como base para responder à pergunta do recrutador.
 
 Currículo:
 {st.session_state.curriculo_texto}
 
-Pergunta feita pelo recrutador:
-{pergunta}
-
-Instruções:
-- Responda diretamente à pergunta com base no currículo.
-- Use um tom natural e seguro, como se estivesse em uma entrevista real.
-- Se a pergunta for pessoal ou comportamental, destaque conquistas, experiências ou atitudes que reforcem sua adequação à vaga.
-- Se a pergunta for técnica, destaque experiências práticas, projetos, certificações ou conhecimentos adquiridos.
-
-Importante:
-- NÃO invente informações.
-- NÃO cite nomes de empresas que não estão no currículo.
-- NÃO diga que "não sabe" — use o que tiver no currículo para construir a melhor resposta possível.
-
-Agora, gere a resposta ideal para o recrutador com base nas informações acima."""
+Pergunta:
+{pergunta}"""
 
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
