@@ -55,7 +55,6 @@ elif st.session_state.pagina == "entrevista":
     st.title("🎤 Entrevista IA (Simulação ao vivo)")
     st.info("Aguardando pergunta do recrutador... (microfone ativo)")
 
-    # Transcrição automática via microfone
     reconhecedor = sr.Recognizer()
     with sr.Microphone() as fonte:
         audio = reconhecedor.listen(fonte, phrase_time_limit=6)
@@ -65,13 +64,29 @@ elif st.session_state.pagina == "entrevista":
         st.success(f"Pergunta captada: {pergunta}")
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
-        prompt = f"""Você está participando de uma entrevista de emprego. Use o currículo abaixo como base para responder à pergunta do recrutador.
+
+        prompt = f"""Você está participando de uma entrevista de emprego.
+
+Seu objetivo é responder à pergunta feita pelo recrutador usando como referência o conteúdo do currículo abaixo. Mantenha um tom profissional, confiante, objetivo e claro. Evite respostas vagas ou genéricas. Personalize a resposta com base nas experiências, habilidades e qualificações descritas no currículo.
 
 Currículo:
 {st.session_state.curriculo_texto}
 
-Pergunta:
-{pergunta}"""
+Pergunta feita pelo recrutador:
+{pergunta}
+
+Instruções:
+- Responda diretamente à pergunta com base no currículo.
+- Use um tom natural e seguro, como se estivesse em uma entrevista real.
+- Se a pergunta for pessoal ou comportamental, destaque conquistas, experiências ou atitudes que reforcem sua adequação à vaga.
+- Se a pergunta for técnica, destaque experiências práticas, projetos, certificações ou conhecimentos adquiridos.
+
+Importante:
+- NÃO invente informações.
+- NÃO cite nomes de empresas que não estão no currículo.
+- NÃO diga que "não sabe" — use o que tiver no currículo para construir a melhor resposta possível.
+
+Agora, gere a resposta ideal para o recrutador com base nas informações acima."""
 
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -91,5 +106,3 @@ Pergunta:
         st.error(f"Erro na API de reconhecimento de voz: {e}")
     except Exception as e:
         st.error(f"Ocorreu um erro ao gerar a resposta: {e}")
-        SpeechRecognition
-
