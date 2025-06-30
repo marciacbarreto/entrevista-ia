@@ -1,88 +1,93 @@
-from pathlib import Path
-
-# Código final completo com todas as correções solicitadas, incluindo:
-# - Login no início
-# - Uso do currículo como base, mas não como limitação
-# - Prompt ajustado para respeitar a pergunta do recrutador
-codigo_final_completo = '''
 import streamlit as st
 import openai
 import os
-import json
-import base64
 import tempfile
 import speech_recognition as sr
 from PyPDF2 import PdfReader
 
 # CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Entrevista IA", layout="centered")
+st.set_page_config(page_title="Entrevista IA", layout="centered", initial_sidebar_state="collapsed")
 
-# LOGIN - BLOQUEIA O APP ATÉ O USUÁRIO AUTORIZADO ENTRAR
-emails_autorizados = ["marciacbarreto@gmail.com"]
-senha_correta = "123456"
+# GERENCIAMENTO DE PÁGINAS (Telas)
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "login"
 
-st.title("🔒 Login de Acesso")
-email = st.text_input("Email")
-senha = st.text_input("Senha", type="password")
+# TELA 1 – LOGIN
+if st.session_state.pagina == "login":
+    st.title("🔒 Acesso Restrito")
+    email = st.text_input("Email")
+    senha = st.text_input("Senha", type="password")
 
-if email not in emails_autorizados or senha != senha_correta:
-    st.warning("Informe seu e-mail e senha corretos para acessar.")
-    st.stop()
+    if st.button("Entrar"):
+        if email == "marciacbarreto@gmail.com" and senha == "123456":
+            st.session_state.pagina = "upload"
+            st.rerun()
+        else:
+            st.error("E-mail ou senha inválidos.")
 
-# CONTEÚDO PRINCIPAL DO APP
-st.title("Entrevista IA")
-st.write("Faça sua pergunta abaixo ou use o microfone (em breve!)")
+# TELA 2 – UPLOAD DO CURRÍCULO + LINK DA REUNIÃO
+elif st.session_state.pagina == "upload":
+    st.title("Entrevista IA – Currículo e Link")
+    uploaded_file = st.file_uploader("📎 Envie seu currículo (PDF)", type=["pdf"])
+    link_reuniao = st.text_input("🔗 Cole o link da reunião")
 
-# CHAVE DA API
-openai.api_key = os.getenv("OPENAI_API_KEY")
+    if "curriculo_texto" not in st.session_state:
+        st.session_state.curriculo_texto = ""
 
-# UPLOAD DE CURRÍCULO
-st.subheader("Upload do currículo (PDF, DOCX, etc.)")
-uploaded_file = st.file_uploader("Escolha o arquivo do currículo", type=["pdf", "docx", "txt"])
-
-dados_curriculo = ""
-if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        tmp_path = tmp_file.name
-    if uploaded_file.name.endswith(".pdf"):
+    if uploaded_file:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(uploaded_file.read())
+            tmp_path = tmp_file.name
         reader = PdfReader(tmp_path)
-        dados_curriculo = " ".join([page.extract_text() or "" for page in reader.pages])
-    elif uploaded_file.name.endswith(".txt") or uploaded_file.name.endswith(".docx"):
-        with open(tmp_path, "r", encoding="utf-8") as f:
-            dados_curriculo = f.read()
-    st.success("Currículo carregado com sucesso!")
+        texto = " ".join([page.extract_text() or "" for page in reader.pages])
+        st.session_state.curriculo_texto = texto
+        st.success("✅ Currículo carregado com sucesso.")
 
-# CAMPO PARA LINK DA REUNIÃO
-st.subheader("Link da reunião")
-link_reuniao = st.text_input("Cole aqui o link da reunião")
-
-# CAMPO PARA PERGUNTA DO RECRUTADOR
-st.subheader("Pergunta do recrutador")
-pergunta = st.text_input("Digite ou fale sua pergunta")
-
-# BOTÃO PARA GERAR RESPOSTA
-if st.button("Responder"):
-    if not dados_curriculo:
-        st.error("Por favor, envie um currículo primeiro.")
-    elif not pergunta:
-        st.error("Digite ou fale a pergunta primeiro.")
+    if uploaded_file and link_reuniao:
+        if st.button("Avançar"):
+            st.session_state.pagina = "entrevista"
+            st.rerun()
     else:
-        prompt = f"Você é um candidato em uma entrevista de emprego. Use o currículo abaixo como base, mas responda à pergunta do recrutador de forma completa, mesmo que precise ir além do currículo.\n\nCurrículo:\n{dados_curriculo}\n\nPergunta do recrutador:\n{pergunta}"
+        st.info("Envie o currículo e cole o link para continuar.")
+
+# TELA 3 – SIMULAÇÃO DE ENTREVISTA POR VOZ
+elif st.session_state.pagina == "entrevista":
+    st.title("🎤 Entrevista IA (Simulação ao vivo)")
+    st.info("Aguardando pergunta do recrutador... (microfone ativo)")
+
+    # Transcrição automática via microfone
+    reconhecedor = sr.Recognizer()
+    with sr.Microphone() as fonte:
+        audio = reconhecedor.listen(fonte, phrase_time_limit=6)
+
+    try:
+        pergunta = reconhecedor.recognize_google(audio, language="pt-BR")
+        st.success(f"Pergunta captada: {pergunta}")
+
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        prompt = f"Você está participando de uma entrevista de emprego. Use o currículo abaixo como base para responder à pergunta do recrutador.
+
+Currículo:
+{st.session_state.curriculo_texto}
+
+Pergunta:
+{pergunta}"
+
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Você está participando de uma entrevista de emprego. Responda com confiança e objetividade."},
+                {"role": "system", "content": "Você é um candidato em uma entrevista de emprego. Responda com objetividade, clareza e profissionalismo."},
                 {"role": "user", "content": prompt}
             ]
         )
+
         resposta_texto = resposta['choices'][0]['message']['content']
-        st.success("Resposta sugerida:")
+        st.subheader("💬 Resposta da IA")
         st.write(resposta_texto)
-'''
 
-# Salvar o código em arquivo
-arquivo_final = Path("/mnt/data/interface_app_segura.py")
-arquivo_final.write_text(codigo_final_completo)
-
-arquivo_final.name
+    except sr.UnknownValueError:
+        st.warning("Não foi possível entender a pergunta. Por favor, fale novamente.")
+    except sr.RequestError as e:
+        st.error(f"Erro na API de reconhecimento de voz: {e}")
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao gerar a resposta: {e}")
