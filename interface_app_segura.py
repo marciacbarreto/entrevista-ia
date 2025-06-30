@@ -2,90 +2,85 @@ import streamlit as st
 import openai
 import os
 import tempfile
+import fitz  # PyMuPDF
 import speech_recognition as sr
-from PyPDF2 import PdfReader
+import docx2txt
+import pdfplumber
 
-# CONFIGURAÇÃO
-st.set_page_config(page_title="Entrevista IA", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Entrevista IA", layout="wide")
 
-if "pagina" not in st.session_state:
-    st.session_state.pagina = "login"
+# Inicializa a etapa da navegação
+if "etapa" not in st.session_state:
+    st.session_state.etapa = "login"
 
-# TELA 1 – LOGIN
-if st.session_state.pagina == "login":
-    st.title("🔒 Acesso Restrito")
+def pagina_login():
+    st.title("Entrevista IA")
+    st.subheader("Faça o login para continuar")
     email = st.text_input("Email")
     senha = st.text_input("Senha", type="password")
-
     if st.button("Entrar"):
         if email == "marciacbarreto@gmail.com" and senha == "123456":
-            st.session_state.pagina = "upload"
-            st.rerun()
+            st.session_state.etapa = "upload"
         else:
-            st.error("E-mail ou senha inválidos.")
+            st.error("Credenciais inválidas.")
 
-# TELA 2 – UPLOAD
-elif st.session_state.pagina == "upload":
-    st.title("Entrevista IA – Currículo e Link")
-    uploaded_file = st.file_uploader("📎 Envie seu currículo (PDF)", type=["pdf"])
-    link_reuniao = st.text_input("🔗 Cole o link da reunião")
+def pagina_upload():
+    st.title("Upload do Currículo e Link da Reunião")
+    arquivo = st.file_uploader("Envie seu currículo (PDF, DOCX ou TXT)", type=["pdf", "docx", "txt"])
+    link_reuniao = st.text_input("Cole aqui o link da reunião (Zoom, Meet, etc.)")
+    if st.button("Confirmar e continuar"):
+        if arquivo:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(arquivo.read())
+                caminho_arquivo = tmp.name
+            st.session_state.curriculo = extrair_texto_curriculo(caminho_arquivo)
+            st.session_state.etapa = "entrevista"
+        else:
+            st.error("Por favor, envie seu currículo.")
 
-    if "curriculo_texto" not in st.session_state:
-        st.session_state.curriculo_texto = ""
+def pagina_entrevista():
+    st.title("Entrevista Simulada")
+    pergunta = st.text_input("Pergunta do recrutador (digite ou use o microfone)")
+    if st.button("Responder"):
+        if pergunta:
+            resposta = responder_ia(pergunta)
+            st.success(f"Resposta sugerida: {resposta}")
+        else:
+            st.warning("Digite a pergunta para obter a resposta.")
 
-    if uploaded_file:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            tmp_path = tmp_file.name
-        reader = PdfReader(tmp_path)
-        texto = " ".join([page.extract_text() or "" for page in reader.pages])
-        st.session_state.curriculo_texto = texto
-        st.success("✅ Currículo carregado com sucesso.")
+def extrair_texto_curriculo(caminho):
+    if caminho.endswith(".pdf"):
+        texto = ""
+        try:
+            with pdfplumber.open(caminho) as pdf:
+                for page in pdf.pages:
+                    texto += page.extract_text() or ""
+        except:
+            texto = "Erro ao ler PDF."
+        return texto
+    elif caminho.endswith(".docx"):
+        return docx2txt.process(caminho)
+    elif caminho.endswith(".txt"):
+        with open(caminho, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
 
-    if uploaded_file and link_reuniao:
-        if st.button("Avançar"):
-            st.session_state.pagina = "entrevista"
-            st.rerun()
-    else:
-        st.info("Envie o currículo e cole o link para continuar.")
-
-# TELA 3 – ENTREVISTA (voz → resposta)
-elif st.session_state.pagina == "entrevista":
-    st.title("🎤 Entrevista IA (Simulação ao vivo)")
-    st.info("Aguardando pergunta do recrutador... (microfone ativo)")
-
-    reconhecedor = sr.Recognizer()
-    with sr.Microphone() as fonte:
-        audio = reconhecedor.listen(fonte, phrase_time_limit=6)
-
+def responder_ia(pergunta):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    contexto = f"Base do currículo: {st.session_state.curriculo}\nPergunta: {pergunta}\nResposta:"
     try:
-        pergunta = reconhecedor.recognize_google(audio, language="pt-BR")
-        st.success(f"Pergunta captada: {pergunta}")
-
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        prompt = f"""Você está participando de uma entrevista de emprego. Use o currículo abaixo como base para responder à pergunta do recrutador.
-
-Currículo:
-{st.session_state.curriculo_texto}
-
-Pergunta:
-{pergunta}"""
-
         resposta = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Você é um candidato em uma entrevista de emprego. Responda com objetividade, clareza e profissionalismo."},
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": contexto}]
         )
-
-        resposta_texto = resposta['choices'][0]['message']['content']
-        st.subheader("💬 Resposta da IA")
-        st.write(resposta_texto)
-
-    except sr.UnknownValueError:
-        st.warning("Não foi possível entender a pergunta. Por favor, fale novamente.")
-    except sr.RequestError as e:
-        st.error(f"Erro na API de reconhecimento de voz: {e}")
+        return resposta.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"Ocorreu um erro ao gerar a resposta: {e}")
+        return f"Erro ao responder: {e}"
+
+# Controle de navegação
+if st.session_state.etapa == "login":
+    pagina_login()
+elif st.session_state.etapa == "upload":
+    pagina_upload()
+elif st.session_state.etapa == "entrevista":
+    pagina_entrevista()
