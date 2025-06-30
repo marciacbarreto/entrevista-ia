@@ -91,3 +91,5 @@ Pergunta:
         st.error(f"Erro na API de reconhecimento de voz: {e}")
     except Exception as e:
         st.error(f"Ocorreu um erro ao gerar a resposta: {e}")
+        SpeechRecognition
+
