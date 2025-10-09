@@ -1,65 +1,76 @@
 import streamlit as st
-import openai
 import os
 import tempfile
 import fitz  # PyMuPDF
 import PyPDF2
 import speech_recognition as sr
+from openai import OpenAI
 
-# Configuração visual
+# Configuração da página
 st.set_page_config(page_title="Entrevista IA", layout="centered")
-st.title("🤖 Entrevista IA - Assistente de Respostas")
+st.markdown("<h1 style='text-align: center;'>Entrevista IA</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Envie seu currículo e a vaga. Fale e receba a resposta ideal.</p>", unsafe_allow_html=True)
 
-# Chave da OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# API OpenAI
+chave_api = os.getenv("ABRIR_CHAVE_API")
+client = OpenAI(api_key=chave_api)
 
-# Função para extrair texto de currículo PDF
-def extrair_texto_curriculo(caminho):
-    if caminho.endswith(".pdf"):
-        with fitz.open(caminho) as doc:
-            texto = ""
+# Função para extrair texto do currículo
+def extrair_texto_pdf(caminho):
+    texto = ""
+    if caminho.name.endswith(".pdf"):
+        with fitz.open(stream=caminho.read(), filetype="pdf") as doc:
             for pagina in doc:
                 texto += pagina.get_text()
-            return texto
-    return "Formato não suportado."
+    return texto
 
-# Função para responder com base no currículo e vaga
-def responder_pergunta(curriculo, vaga, pergunta):
-    prompt = f"""
-Você é um candidato se preparando para uma entrevista. Responda de forma profissional e convincente em até 5 linhas.
-📄 Currículo: {curriculo}
-🎯 Vaga: {vaga}
-❓ Pergunta do recrutador: {pergunta}
+# Upload dos arquivos
+col1, col2 = st.columns(2)
+with col1:
+    arquivo_curriculo = st.file_uploader("📎 Anexe seu currículo (PDF)", type="pdf")
+with col2:
+    vaga = st.text_area("💼 Cole a vaga de interesse", height=130)
 
-Resposta ideal:
-"""
-    resposta = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return resposta.choices[0].message.content.strip()
+# Campo para iniciar escuta
+if arquivo_curriculo and vaga:
+    texto_curriculo = extrair_texto_pdf(arquivo_curriculo)
 
-# Upload do currículo
-arquivo = st.file_uploader("📎 Envie seu currículo (PDF)", type=["pdf"])
-vaga = st.text_area("📌 Cole aqui a descrição da vaga")
+    st.markdown("---")
+    st.markdown("🎙️ Clique abaixo e faça sua pergunta como se fosse o recrutador:")
 
-if arquivo and vaga:
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(arquivo.read())
-        caminho = tmp.name
-        texto_curriculo = extrair_texto_curriculo(caminho)
-        st.success("✅ Currículo processado com sucesso!")
-
-    st.info("Clique abaixo e fale a pergunta do recrutador")
-    if st.button("🎤 Escutar pergunta"):
-        recognizer = sr.Recognizer()
+    if st.button("🎤 Ouvir pergunta"):
+        reconhecedor = sr.Recognizer()
         with sr.Microphone() as source:
-            st.write("⏳ Escutando...")
-            try:
-                audio = recognizer.listen(source, timeout=5)
-                pergunta = recognizer.recognize_google(audio, language="pt-BR")
-                resposta = responder_pergunta(texto_curriculo, vaga, pergunta)
-                st.success(f"📣 Pergunta reconhecida: {pergunta}")
-                st.markdown(f"🧠 **Resposta sugerida:**\n\n{resposta}")
-            except Exception as e:
-                st.error("❌ Não consegui entender sua voz. Tente novamente.")
+            audio = reconhecedor.listen(source, phrase_time_limit=5)
+
+        try:
+            pergunta = reconhecedor.recognize_google(audio, language="pt-BR")
+            with st.spinner("Pensando na melhor resposta..."):
+                prompt = f"""
+Você é um assistente de entrevistas. Com base neste currículo e nesta vaga, responda de forma natural como se fosse o candidato.
+
+VAGA:
+{vaga}
+
+CURRÍCULO:
+{texto_curriculo}
+
+PERGUNTA DO RECRUTADOR:
+{pergunta}
+
+RESPOSTA DO CANDIDATO EM ATÉ 5 LINHAS:
+"""
+                resposta = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.6,
+                    max_tokens=500
+                )
+                st.success(resposta.choices[0].message.content.strip())
+
+        except sr.UnknownValueError:
+            st.warning("⚠️ Não foi possível entender o que foi falado.")
+        except Exception as e:
+            st.error(f"Erro: {e}")
+else:
+    st.info("📄 Envie o currículo e cole a vaga para ativar o campo de pergunta.")
