@@ -1,39 +1,20 @@
 import os
-import io
-import tempfile
+import re
 import fitz  # PyMuPDF
 import docx
 import streamlit as st
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from openai import OpenAI, RateLimitError
+from typing import List
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# ==========================
-# Configuração inicial
-# ==========================
-st.set_page_config(page_title="Entrevista IA", layout="centered")
-st.markdown("<h1 style='text-align: center;'>Entrevista IA</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>1️⃣ Envie seu currículo | 2️⃣ Cole/Anexe a vaga | 3️⃣ Faça a pergunta por voz ou texto</p>", unsafe_allow_html=True)
+# ============== UI base ==============
+st.set_page_config(page_title="Entrevista IA — Turbo Local", layout="centered")
+st.markdown("<h1 style='text-align: center;'>Entrevista IA — Turbo Local (sem API)</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>1) Envie seu currículo  |  2) Cole/Anexe a vaga  |  3) Pergunte (voz ou texto)</p>", unsafe_allow_html=True)
 
-# ==========================
-# Cliente OpenAI (aceita duas variáveis de ambiente)
-# ==========================
-OPENAI_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("ABRIR_CHAVE_API")
-if not OPENAI_KEY:
-    st.warning("⚠️ Defina a variável OPENAI_API_KEY (ou ABRIR_CHAVE_API) nos Secrets para funcionar.")
-client = OpenAI(api_key=OPENAI_KEY)
-
-# Modelos
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")        # leve/rápido
-ASR_MODEL = os.getenv("ASR_MODEL", "whisper-1")          # transcrição
-
-# ==========================
-# Funções utilitárias
-# ==========================
-
+# ============== Utilidades ==============
 def extrair_texto_arquivo(uploaded_file) -> str:
-    """Extrai texto de PDF ou DOCX (currículo ou vaga)."""
-    if not uploaded_file:
-        return ""
+    if not uploaded_file: return ""
     name = uploaded_file.name.lower()
     try:
         if name.endswith(".pdf"):
@@ -42,157 +23,82 @@ def extrair_texto_arquivo(uploaded_file) -> str:
         elif name.endswith(".docx"):
             d = docx.Document(uploaded_file)
             return "\n".join(p.text for p in d.paragraphs)
-        else:
-            # fallback texto puro
+        elif name.endswith(".txt"):
             data = uploaded_file.read()
-            try:
-                return data.decode("utf-8", errors="ignore")
-            except Exception:
-                return str(data)
+            try: return data.decode("utf-8", errors="ignore")
+            except Exception: return str(data)
     except Exception as e:
         st.error(f"Erro ao ler {name}: {type(e).__name__}")
-        return ""
+    return ""
 
-# Trava anti-duplicação
+def sent_tokenize(texto: str) -> List[str]:
+    if not texto: return []
+    partes = re.split(r"(?<=[\.\!\?])\s+", texto.strip())
+    return [s.strip() for s in partes if s.strip()]
 
-def is_busy():
-    return st.session_state.get("llm_busy", False)
-
-def set_busy(v: bool):
-    st.session_state["llm_busy"] = v
-
-# Retry/backoff para 429
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=1, max=20),
-    retry=retry_if_exception_type(RateLimitError),
-)
-def call_llm(system_prompt: str, user_prompt: str) -> str:
-    resp = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.3,
-        max_tokens=350,
-        top_p=1,
-    )
-    return resp.choices[0].message.content.strip()
-
-
-def responder(pergunta_txt: str, contexto_cv: str, contexto_vaga: str) -> str | None:
-    if not pergunta_txt or not pergunta_txt.strip():
-        return None
-
-    # Debounce: evita repetir mesma pergunta no rerun
-    last_q = st.session_state.get("last_q")
-    if last_q and pergunta_txt.strip() == last_q.strip():
-        return st.session_state.get("last_answer")
-
-    if is_busy():
-        return st.session_state.get("last_answer")
-
-    set_busy(True)
+def selecionar_trechos(pergunta: str, *textos: str, limite_chars: int = 1200) -> str:
+    corpus = []
+    for t in textos:
+        if not t: continue
+        for s in sent_tokenize(t):
+            if 25 <= len(s) <= 300:
+                corpus.append(s)
+    if not corpus: 
+        return (" ".join(textos))[:limite_chars]
     try:
-        system = (
-            "Você é um assistente de entrevistas. Responda como se fosse o candidato, em primeira pessoa, "
-            "de forma breve (2 a 5 frases), clara e confiante, sempre baseado no currículo e na vaga. "
-            "Não produza áudio, apenas texto objetivo."
-        )
-        user = (
-            f"PERGUNTA DO RECRUTADOR: {pergunta_txt}\n\n"
-            f"CURRÍCULO (trechos relevantes):\n{contexto_cv}\n\n"
-            f"VAGA/EMPRESA (trechos relevantes):\n{contexto_vaga}\n\n"
-            "Monte uma resposta direta, com foco em resultados, habilidades e aderência à vaga."
-        )
-        resposta = call_llm(system, user)
-        st.session_state["last_q"] = pergunta_txt
-        st.session_state["last_answer"] = resposta
-        return resposta
-    finally:
-        set_busy(False)
+        vec = TfidfVectorizer().fit_transform([pergunta] + corpus)
+        sims = cosine_similarity(vec[0:1], vec[1:]).ravel()
+        idx = sims.argsort()[::-1][:20]
+        escolhidas = [corpus[i] for i in idx]
+        return " ".join(escolhidas)[:limite_chars]
+    except Exception:
+        return (" ".join(textos))[:limite_chars]
 
+def montar_resposta(pergunta: str, cv_ctx: str, vaga_ctx: str) -> str:
+    base_intro = f"Sobre \"{pergunta}\": "
+    p1 = "Tenho experiência direta com atividades relacionadas e foco em metas."
+    if cv_ctx: p1 += " Do meu currículo, destaco: " + cv_ctx[:260]
+    p2 = "Em relação à vaga, vejo forte aderência nas responsabilidades e requisitos."
+    if vaga_ctx: p2 += " Pontos de aderência: " + vaga_ctx[:220]
+    p3 = "Posso começar contribuindo rapidamente, com organização e comunicação clara."
+    return f"{base_intro}{p1} {p2} {p3}"
 
-def transcrever_audio_bytes(audio_bytes: bytes, suffix: str = ".wav") -> str:
-    """Envia bytes de áudio para o Whisper (ASR_MODEL) e retorna texto."""
-    if not audio_bytes:
-        return ""
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(audio_bytes)
-        tmp.flush()
-        tmp_name = tmp.name
-    with open(tmp_name, "rb") as f:
-        tr = client.audio.transcriptions.create(model=ASR_MODEL, file=f)
-    return tr.text.strip() if hasattr(tr, "text") else (tr.get("text", "") if isinstance(tr, dict) else "")
-
-
-# ==========================
-# Layout principal
-# ==========================
-col1, col2 = st.columns(2)
-with col1:
-    cv_file = st.file_uploader("📎 Currículo (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"], key="cv")
-with col2:
-    vaga_file = st.file_uploader("🏢 Vaga/Empresa (PDF/DOCX/TXT) — opcional", type=["pdf", "docx", "txt"], key="vaga_file")
-
+# ============== Uploads ==============
+c1, c2 = st.columns(2)
+with c1:
+    cv_file = st.file_uploader("📎 Currículo (PDF/DOCX/TXT)", type=["pdf","docx","txt"])
+with c2:
+    vaga_file = st.file_uploader("🏢 Vaga/Empresa (PDF/DOCX/TXT) — opcional", type=["pdf","docx","txt"])
 vaga_texto = st.text_area("💼 Cole a descrição da vaga (opcional se anexou arquivo)", height=120)
 
-# Extrai textos
-texto_cv = extrair_texto_arquivo(cv_file) if cv_file else ""
+texto_cv   = extrair_texto_arquivo(cv_file) if cv_file else ""
 texto_vaga = (extrair_texto_arquivo(vaga_file) if vaga_file else "") or vaga_texto
 
 if not cv_file:
     st.info("📄 Envie o currículo para ativar a simulação.")
 
-# ==========================
-# Entrada por voz (microfone) + fallback por texto
-# ==========================
 st.markdown("---")
-st.subheader("🎙️ Pergunta do recrutador (voz) ou digite abaixo")
+st.subheader("🎙️ Pergunta do recrutador")
 
-# Tentativa com st-mic-recorder, mas mantendo o app estável mesmo sem a lib
-audio_bytes = None
+# Microfone opcional (se biblioteca disponível)
+audio_capturado = False
 try:
     from st_mic_recorder import mic_recorder
-    audio = mic_recorder(
-        start_prompt="Clique para começar a escutar",
-        stop_prompt="Parar",
-        use_container_width=True,
-        just_once=True,
-        format="wav",
-    )
-    if audio and isinstance(audio, dict):
-        audio_bytes = audio.get("bytes")
+    a = mic_recorder(start_prompt="Gravar pergunta (voz)", stop_prompt="Parar", use_container_width=True, just_once=True, format="wav")
+    if a and isinstance(a, dict) and a.get("bytes"):
+        audio_capturado = True
+        st.info("🎤 Áudio capturado. Digite abaixo a pergunta transcrita (esta versão é 100% local).")
 except Exception:
-    st.caption("🎤 st-mic-recorder não disponível — usando apenas entrada por texto.")
+    st.caption("🎤 Microfone indisponível — use a entrada por texto.")
 
-# Fallback texto
-pergunta_digitada = st.text_input("❓ Ou digite a pergunta do recrutador", placeholder="Ex.: Quais seus pontos fortes para esta vaga?")
+pergunta = st.text_input("❓ Digite a pergunta do recrutador", placeholder="Ex.: O que você fazia na empresa?")
 
-# ==========================
-# Gatilho: quando houver áudio final OU pergunta digitada nova
-# ==========================
-resposta_gerada = None
-
-if cv_file:
-    # Se veio áudio, transcreve e responde
-    if audio_bytes:
-        with st.spinner("Transcrevendo áudio..."):
-            pergunta_transcrita = transcrever_audio_bytes(audio_bytes, suffix=".wav")
-        if pergunta_transcrita:
-            with st.spinner("Gerando resposta..."):
-                resposta_gerada = responder(pergunta_transcrita, texto_cv, texto_vaga)
-    # Se veio texto digitado
-    elif pergunta_digitada:
-        with st.spinner("Gerando resposta..."):
-            resposta_gerada = responder(pergunta_digitada, texto_cv, texto_vaga)
-
-# ==========================
-# Saída em texto (somente você vê)
-# ==========================
-if resposta_gerada:
+# ============== Pipeline local ==============
+if texto_cv and pergunta:
+    with st.spinner("Gerando resposta (local)..."):
+        cv_ctx   = selecionar_trechos(pergunta, texto_cv)
+        vaga_ctx = selecionar_trechos(pergunta, texto_vaga)
+        resposta = montar_resposta(pergunta, cv_ctx, vaga_ctx)
     st.success("Resposta sugerida (somente você vê):")
-    st.write(resposta_gerada)
-    st.caption("Dica: leia pausadamente. Se quiser refinar, faça nova pergunta por voz ou texto.")
+    st.write(resposta)
+    st.caption("Dica: leia pausadamente. Faça uma nova pergunta para outra resposta.")
