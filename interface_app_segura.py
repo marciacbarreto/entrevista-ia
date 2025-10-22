@@ -1,37 +1,44 @@
 import os
-import io
+import re
 import tempfile
 import fitz  # PyMuPDF
 import docx
 import streamlit as st
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from openai import OpenAI, RateLimitError
+from typing import List, Tuple
+
+# ===== Pacotes para busca web e extração de conteúdo =====
+# (IA gratuita via web — sem OpenAI)
+from tavily import TavilyClient
+import trafilatura
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 # ==========================
 # Configuração inicial
 # ==========================
-st.set_page_config(page_title="Entrevista IA", layout="centered")
-st.markdown("<h1 style='text-align: center;'>Entrevista IA</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>1️⃣ Envie seu currículo | 2️⃣ Cole/Anexe a vaga | 3️⃣ Faça a pergunta por voz ou texto</p>", unsafe_allow_html=True)
+st.set_page_config(page_title="Entrevista IA (Web AI)", layout="centered")
+st.markdown("<h1 style='text-align: center;'>Entrevista IA — IA gratuita via Web</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>1️⃣ Envie seu currículo | 2️⃣ Cole/Anexe a vaga | 3️⃣ Pergunte (texto ou voz*)</p>", unsafe_allow_html=True)
+st.caption("*Voz opcional. Se o microfone não estiver disponível, use o campo de texto.")
 
 # ==========================
-# Cliente OpenAI (aceita duas variáveis de ambiente)
+# Chaves/Config (somente Tavily, grátis)
 # ==========================
-OPENAI_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("ABRIR_CHAVE_API")
-if not OPENAI_KEY:
-    st.warning("⚠️ Defina a variável OPENAI_API_KEY (ou ABRIR_CHAVE_API) nos Secrets para funcionar.")
-client = OpenAI(api_key=OPENAI_KEY)
+TAVILY_KEY = (
+    st.secrets.get("TAVILY_API_KEY") if hasattr(st, "secrets") else None
+) or os.getenv("TAVILY_API_KEY")
 
-# Modelos
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")        # leve/rápido
-ASR_MODEL = os.getenv("ASR_MODEL", "whisper-1")          # transcrição
+if not TAVILY_KEY:
+    st.warning(
+        "⚠️ Defina a chave gratuita do Tavily em Settings → Secrets → `TAVILY_API_KEY = \"tvly_...\"` para habilitar a busca na web."
+    )
 
 # ==========================
-# Funções utilitárias
+# Utilitários de arquivo
 # ==========================
 
 def extrair_texto_arquivo(uploaded_file) -> str:
-    """Extrai texto de PDF ou DOCX (currículo ou vaga)."""
+    """Extrai texto de PDF/DOCX/TXT."""
     if not uploaded_file:
         return ""
     name = uploaded_file.name.lower()
@@ -42,157 +49,72 @@ def extrair_texto_arquivo(uploaded_file) -> str:
         elif name.endswith(".docx"):
             d = docx.Document(uploaded_file)
             return "\n".join(p.text for p in d.paragraphs)
-        else:
-            # fallback texto puro
+        elif name.endswith(".txt"):
             data = uploaded_file.read()
             try:
                 return data.decode("utf-8", errors="ignore")
             except Exception:
                 return str(data)
+        else:
+            return ""
     except Exception as e:
         st.error(f"Erro ao ler {name}: {type(e).__name__}")
         return ""
 
-# Trava anti-duplicação
+# ==========================
+# Busca na Web (Tavily) + coleta de conteúdo (Trafilatura)
+# ==========================
 
-def is_busy():
-    return st.session_state.get("llm_busy", False)
-
-def set_busy(v: bool):
-    st.session_state["llm_busy"] = v
-
-# Retry/backoff para 429
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=1, max=20),
-    retry=retry_if_exception_type(RateLimitError),
-)
-def call_llm(system_prompt: str, user_prompt: str) -> str:
-    resp = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.3,
-        max_tokens=350,
-        top_p=1,
-    )
-    return resp.choices[0].message.content.strip()
-
-
-def responder(pergunta_txt: str, contexto_cv: str, contexto_vaga: str) -> str | None:
-    if not pergunta_txt or not pergunta_txt.strip():
-        return None
-
-    # Debounce: evita repetir mesma pergunta no rerun
-    last_q = st.session_state.get("last_q")
-    if last_q and pergunta_txt.strip() == last_q.strip():
-        return st.session_state.get("last_answer")
-
-    if is_busy():
-        return st.session_state.get("last_answer")
-
-    set_busy(True)
+@st.cache_data(show_spinner=False, ttl=600)
+def tavily_search(query: str, max_results: int = 5) -> List[dict]:
+    if not TAVILY_KEY:
+        return []
     try:
-        system = (
-            "Você é um assistente de entrevistas. Responda como se fosse o candidato, em primeira pessoa, "
-            "de forma breve (2 a 5 frases), clara e confiante, sempre baseado no currículo e na vaga. "
-            "Não produza áudio, apenas texto objetivo."
-        )
-        user = (
-            f"PERGUNTA DO RECRUTADOR: {pergunta_txt}\n\n"
-            f"CURRÍCULO (trechos relevantes):\n{contexto_cv}\n\n"
-            f"VAGA/EMPRESA (trechos relevantes):\n{contexto_vaga}\n\n"
-            "Monte uma resposta direta, com foco em resultados, habilidades e aderência à vaga."
-        )
-        resposta = call_llm(system, user)
-        st.session_state["last_q"] = pergunta_txt
-        st.session_state["last_answer"] = resposta
-        return resposta
-    finally:
-        set_busy(False)
+        client = TavilyClient(api_key=TAVILY_KEY)
+        res = client.search(query=query, max_results=max_results, include_raw_content=False)
+        return res.get("results", [])
+    except Exception:
+        return []
 
-
-def transcrever_audio_bytes(audio_bytes: bytes, suffix: str = ".wav") -> str:
-    """Envia bytes de áudio para o Whisper (ASR_MODEL) e retorna texto."""
-    if not audio_bytes:
+@st.cache_data(show_spinner=False, ttl=600)
+def baixar_texto_url(url: str, max_chars: int = 12000) -> str:
+    try:
+        dl = trafilatura.fetch_url(url, timeout=10)
+        txt = trafilatura.extract(dl) if dl else ""
+        return (txt or "")[:max_chars]
+    except Exception:
         return ""
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(audio_bytes)
-        tmp.flush()
-        tmp_name = tmp.name
-    with open(tmp_name, "rb") as f:
-        tr = client.audio.transcriptions.create(model=ASR_MODEL, file=f)
-    return tr.text.strip() if hasattr(tr, "text") else (tr.get("text", "") if isinstance(tr, dict) else "")
-
 
 # ==========================
-# Layout principal
+# Extração de empresa/cargo da vaga (heurístico)
 # ==========================
-col1, col2 = st.columns(2)
-with col1:
-    cv_file = st.file_uploader("📎 Currículo (PDF/DOCX/TXT)", type=["pdf", "docx", "txt"], key="cv")
-with col2:
-    vaga_file = st.file_uploader("🏢 Vaga/Empresa (PDF/DOCX/TXT) — opcional", type=["pdf", "docx", "txt"], key="vaga_file")
 
-vaga_texto = st.text_area("💼 Cole a descrição da vaga (opcional se anexou arquivo)", height=120)
-
-# Extrai textos
-texto_cv = extrair_texto_arquivo(cv_file) if cv_file else ""
-texto_vaga = (extrair_texto_arquivo(vaga_file) if vaga_file else "") or vaga_texto
-
-if not cv_file:
-    st.info("📄 Envie o currículo para ativar a simulação.")
-
-# ==========================
-# Entrada por voz (microfone) + fallback por texto
-# ==========================
-st.markdown("---")
-st.subheader("🎙️ Pergunta do recrutador (voz) ou digite abaixo")
-
-# Tentativa com st-mic-recorder, mas mantendo o app estável mesmo sem a lib
-audio_bytes = None
-try:
-    from st_mic_recorder import mic_recorder
-    audio = mic_recorder(
-        start_prompt="Clique para começar a escutar",
-        stop_prompt="Parar",
-        use_container_width=True,
-        just_once=True,
-        format="wav",
-    )
-    if audio and isinstance(audio, dict):
-        audio_bytes = audio.get("bytes")
-except Exception:
-    st.caption("🎤 st-mic-recorder não disponível — usando apenas entrada por texto.")
-
-# Fallback texto
-pergunta_digitada = st.text_input("❓ Ou digite a pergunta do recrutador", placeholder="Ex.: Quais seus pontos fortes para esta vaga?")
+def guess_company_and_role(vaga_txt: str) -> Tuple[str, str]:
+    empresa, cargo = "", ""
+    if not vaga_txt:
+        return empresa, cargo
+    m = re.search(r"(?i)empresa[:\s-]+([\w .&-]{2,80})", vaga_txt)
+    if m:
+        empresa = m.group(1).strip()
+    m2 = re.search(r"(?i)cargo[:\s-]+([\w .&/-]{2,80})", vaga_txt)
+    if m2:
+        cargo = m2.group(1).strip()
+    # fallback simples
+    if not cargo:
+        m3 = re.search(r"(?i)vaga[:\s-]+([\w .&/-]{2,80})", vaga_txt)
+        cargo = m3.group(1).strip() if m3 else cargo
+    return empresa, cargo
 
 # ==========================
-# Gatilho: quando houver áudio final OU pergunta digitada nova
+# Resumo simples (extrativo) e seleção por relevância
 # ==========================
-resposta_gerada = None
 
-if cv_file:
-    # Se veio áudio, transcreve e responde
-    if audio_bytes:
-        with st.spinner("Transcrevendo áudio..."):
-            pergunta_transcrita = transcrever_audio_bytes(audio_bytes, suffix=".wav")
-        if pergunta_transcrita:
-            with st.spinner("Gerando resposta..."):
-                resposta_gerada = responder(pergunta_transcrita, texto_cv, texto_vaga)
-    # Se veio texto digitado
-    elif pergunta_digitada:
-        with st.spinner("Gerando resposta..."):
-            resposta_gerada = responder(pergunta_digitada, texto_cv, texto_vaga)
+def sent_tokenize(texto: str) -> List[str]:
+    # separa por ponto/interrogação/exclamação de forma simples
+    partes = re.split(r"(?<=[\.!?])\s+", texto.strip())
+    return [s.strip() for s in partes if len(s.strip()) > 0]
 
-# ==========================
-# Saída em texto (somente você vê)
-# ==========================
-if resposta_gerada:
-    st.success("Resposta sugerida (somente você vê):")
-    st.write(resposta_gerada)
-    st.caption("Dica: leia pausadamente. Se quiser refinar, faça nova pergunta por voz ou texto.")
+@st.cache_data(show_spinner=False, ttl=600)
+def resumo_extrativo(texto: str, max_sent: int = 6) -> str:
+    if not texto:
+        return ""
