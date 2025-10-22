@@ -1,6 +1,6 @@
 import os
 import re
-import fitz  # PyMuPDF
+from pypdf import PdfReader
 import docx
 import streamlit as st
 from typing import List
@@ -12,7 +12,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # ==============================
 st.set_page_config(page_title="Entrevista IA — Turbo Local", layout="centered")
 
-# --- CSS anti-bug visual (corrige erro 'removeChild') ---
+# CSS anti-bug visual (removeChild)
 st.markdown(
     """
     <style>
@@ -28,16 +28,18 @@ st.markdown("<p style='text-align:center;'>1️⃣ Envie seu currículo | 2️�
 # ==============================
 # FUNÇÕES PRINCIPAIS
 # ==============================
-
 def extrair_texto_arquivo(uploaded_file) -> str:
-    """Extrai texto de PDF, DOCX ou TXT"""
+    """Extrai texto de PDF (pypdf), DOCX (python-docx) ou TXT."""
     if not uploaded_file:
         return ""
     nome = uploaded_file.name.lower()
     try:
         if nome.endswith(".pdf"):
-            with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
-                return "\n".join(p.get_text() for p in doc)
+            reader = PdfReader(uploaded_file)
+            partes = []
+            for page in reader.pages:
+                partes.append(page.extract_text() or "")
+            return "\n".join(partes)
         elif nome.endswith(".docx"):
             d = docx.Document(uploaded_file)
             return "\n".join(p.text for p in d.paragraphs)
@@ -51,14 +53,14 @@ def extrair_texto_arquivo(uploaded_file) -> str:
         return ""
 
 def sent_tokenize(texto: str) -> List[str]:
-    """Divide texto em frases simples"""
+    """Divide texto em frases simples."""
     if not texto:
         return []
     partes = re.split(r"(?<=[\.\!\?])\s+", texto.strip())
     return [s.strip() for s in partes if s.strip()]
 
 def selecionar_trechos(pergunta: str, *textos: str, limite_chars: int = 1200) -> str:
-    """Seleciona trechos mais relevantes com base na pergunta"""
+    """Seleciona trechos mais relevantes com TF-IDF + cosseno."""
     corpus = []
     for t in textos:
         if not t:
@@ -78,16 +80,16 @@ def selecionar_trechos(pergunta: str, *textos: str, limite_chars: int = 1200) ->
         return (" ".join(textos))[:limite_chars]
 
 def montar_resposta(pergunta: str, cv_ctx: str, vaga_ctx: str) -> str:
-    """Monta resposta final em linguagem natural"""
-    intro = f"Sobre \"{pergunta}\": "
-    parte1 = "Tenho experiência direta nas atividades e foco em resultados."
+    """Monta resposta curta e direta em 2–5 frases."""
+    intro = f'Sobre "{pergunta}": '
+    p1 = "Tenho experiência direta nas atividades e foco em resultados."
     if cv_ctx:
-        parte1 += " Do meu currículo, destaco: " + cv_ctx[:250]
-    parte2 = " Em relação à vaga, há forte alinhamento com as exigências da empresa."
+        p1 += " Do meu currículo, destaco: " + cv_ctx[:250]
+    p2 = " Em relação à vaga, vejo forte alinhamento com as responsabilidades e requisitos."
     if vaga_ctx:
-        parte2 += " Pontos de aderência: " + vaga_ctx[:220]
-    parte3 = " Posso contribuir com organização, proatividade e comunicação clara."
-    return f"{intro}{parte1}{parte2}{parte3}"
+        p2 += " Pontos de aderência: " + vaga_ctx[:220]
+    p3 = " Posso começar contribuindo rapidamente, com organização e comunicação clara."
+    return f"{intro}{p1}{p2}{p3}"
 
 # ==============================
 # INTERFACE PRINCIPAL
@@ -109,10 +111,7 @@ if not cv_file:
 st.markdown("---")
 st.subheader("🎙️ Pergunta do recrutador (voz ou texto)")
 
-# ==============================
-# CAPTURA DE ÁUDIO (opcional)
-# ==============================
-audio_capturado = False
+# Microfone opcional (não bloqueia o app se indisponível)
 try:
     from st_mic_recorder import mic_recorder
     a = mic_recorder(
@@ -123,16 +122,15 @@ try:
         format="wav",
     )
     if a and isinstance(a, dict) and a.get("bytes"):
-        audio_capturado = True
-        st.info("🎧 Áudio detectado. Digite ou confirme a pergunta abaixo.")
+        st.info("🎧 Áudio detectado. Digite/cole abaixo a pergunta transcrita (esta versão é 100% local).")
 except Exception:
     st.caption("🎤 Microfone indisponível — use a entrada por texto.")
 
-# ==============================
-# PERGUNTA E RESPOSTA
-# ==============================
 pergunta = st.text_input("❓ Digite a pergunta do recrutador", placeholder="Ex.: O que você fazia na empresa?")
 
+# ==============================
+# PIPELINE LOCAL (instantâneo)
+# ==============================
 if texto_cv and pergunta:
     with st.spinner("Gerando resposta (local)..."):
         cv_ctx = selecionar_trechos(pergunta, texto_cv)
@@ -143,8 +141,6 @@ if texto_cv and pergunta:
     st.write(resposta)
     st.caption("Dica: leia pausadamente. Faça uma nova pergunta para outra resposta.")
 
-# ==============================
-# LIMPAR CACHE E EVITAR CONFLITOS
-# ==============================
+# Limpa caches ao final (evita conflitos de renderização no Streamlit Cloud)
 st.cache_data.clear()
 st.cache_resource.clear()
